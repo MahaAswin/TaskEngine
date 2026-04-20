@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 
 export function useAppKeyboardShortcuts() {
-  const setCreateTaskOpen = useUiStore((s) => s.setCreateTaskOpen);
+  const openCreateTask = useUiStore((s) => s.openCreateTask);
+  const closeCreateTask = useUiStore((s) => s.closeCreateTask);
   const closeConfirm = useUiStore((s) => s.closeConfirm);
   const createTaskOpen = useUiStore((s) => s.createTaskOpen);
   const clearTaskDrawer = useUiStore((s) => s.clearTaskDrawer);
@@ -15,7 +16,7 @@ export function useAppKeyboardShortcuts() {
 
       if (e.key === 'Escape') {
         closeConfirm();
-        if (createTaskOpen) setCreateTaskOpen(false);
+        if (createTaskOpen) closeCreateTask();
         clearTaskDrawer();
         return;
       }
@@ -24,7 +25,7 @@ export function useAppKeyboardShortcuts() {
 
       if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        setCreateTaskOpen(true);
+        openCreateTask();
         return;
       }
 
@@ -36,5 +37,5 @@ export function useAppKeyboardShortcuts() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setCreateTaskOpen, closeConfirm, createTaskOpen, clearTaskDrawer]);
+  }, [openCreateTask, closeCreateTask, closeConfirm, createTaskOpen, clearTaskDrawer]);
 }

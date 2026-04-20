@@ -29,8 +29,8 @@ export default function TeamPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Team</h1>
-          <p className="text-sm text-slate-500">Manage members and roles</p>
+          <h1 className="text-2xl font-semibold text-slate-900">Manage Teams</h1>
+          <p className="text-sm text-slate-500">Organization member administration</p>
         </div>
         <TableSkeleton rows={5} cols={4} />
       </div>
@@ -42,8 +42,8 @@ export default function TeamPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Team</h1>
-        <p className="text-sm text-slate-500">Manage members and roles</p>
+        <h1 className="text-2xl font-semibold text-slate-900">Manage Teams</h1>
+        <p className="text-sm text-slate-500">Organization member administration</p>
       </div>
       {list.length <= 1 && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">

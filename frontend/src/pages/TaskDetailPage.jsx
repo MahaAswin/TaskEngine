@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useOutletContext } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Globe, Users, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import StatusBadge from '../components/StatusBadge';
@@ -47,6 +47,8 @@ export default function TaskDetailPage() {
       priority: task.priority,
       dueDate: task.dueDate ? String(task.dueDate).slice(0, 10) : '',
       assignedToId: task.assignedTo ? String(task.assignedTo) : '',
+      scope: task.scope,
+      teamId: task.teamId ? String(task.teamId) : '',
     });
   }, [task]);
 
@@ -95,6 +97,8 @@ export default function TaskDetailPage() {
       description: form.description,
       status: form.status,
       priority: form.priority,
+      scope: form.scope,
+      teamId: form.scope === 'TEAM' ? form.teamId || null : null,
       dueDate: form.dueDate || null,
       assignedToId: aid ? aid : null,
     });
@@ -140,6 +144,10 @@ export default function TaskDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+              {task.scope === 'GLOBAL' ? <Globe className="h-3.5 w-3.5" /> : task.scope === 'TEAM' ? <Users className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+              {task.scope === 'TEAM' ? `TEAM: ${task.teamId ?? 'Unknown'}` : task.scope}
+            </span>
           </div>
           <h1
             className={`mt-2 text-2xl font-semibold text-slate-900 ${task.deleted ? 'text-slate-500 line-through' : ''}`}

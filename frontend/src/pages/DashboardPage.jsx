@@ -12,9 +12,10 @@ import { useUiStore } from '../stores/uiStore';
 export default function DashboardPage() {
   const { user } = useOutletContext();
   const jwtRole = useAuthStore((s) => s.jwtRole);
-  const setCreateTaskOpen = useUiStore((s) => s.setCreateTaskOpen);
+  const openCreateTask = useUiStore((s) => s.openCreateTask);
   const qc = useQueryClient();
   const [status, setStatus] = useState('');
+  const [scopeTab, setScopeTab] = useState('ALL');
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['task-stats'],
@@ -31,6 +32,15 @@ export default function DashboardPage() {
       if (status) params.set('status', status);
       const { data } = await api.get(`/tasks?${params}`);
       return data;
+    },
+  });
+
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks', 'dash-all'],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: '0', size: '100' });
+      const { data } = await api.get(`/tasks?${params}`);
+      return data.content || [];
     },
   });
 
@@ -64,12 +74,28 @@ export default function DashboardPage() {
     },
   });
 
+  const scopeCounts = allTasks.reduce(
+    (acc, t) => {
+      acc.all += 1;
+      if (t.scope === 'GLOBAL') acc.global += 1;
+      if (t.scope === 'TEAM') acc.team += 1;
+      if (t.scope === 'PRIVATE') acc.private += 1;
+      return acc;
+    },
+    { all: 0, global: 0, team: 0, private: 0 },
+  );
+
   const cards = [
-    { label: 'Total', value: stats?.total ?? 0, tone: 'text-slate-900' },
-    { label: 'To do', value: stats?.todo ?? 0, tone: 'text-slate-700' },
-    { label: 'In progress', value: stats?.inProgress ?? 0, tone: 'text-blue-700' },
-    { label: 'Done', value: stats?.done ?? 0, tone: 'text-emerald-700' },
+    { label: 'All Visible Tasks', value: scopeCounts.all, tone: 'text-slate-900' },
+    { label: 'Global', value: scopeCounts.global, tone: 'text-blue-700' },
+    { label: 'Team', value: scopeCounts.team, tone: 'text-indigo-700' },
+    { label: 'Private', value: scopeCounts.private, tone: 'text-purple-700' },
   ];
+
+  const scopedTasks = (tasksPage?.content || []).filter((t) => {
+    if (scopeTab === 'ALL') return true;
+    return t.scope === scopeTab;
+  });
 
   const loading = statsLoading || tasksLoading;
 
@@ -97,18 +123,32 @@ export default function DashboardPage() {
       <div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">Recent tasks</h2>
-          <select
-            className="rounded-lg border border-bordercard bg-white px-3 py-2 text-sm"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            aria-label="Filter by status"
-          >
-            <option value="">All statuses</option>
-            <option value="TODO">To do</option>
-            <option value="IN_PROGRESS">In progress</option>
-            <option value="IN_REVIEW">In review</option>
-            <option value="DONE">Done</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+              {['ALL', 'GLOBAL', 'TEAM', 'PRIVATE'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={`rounded-md px-3 py-1 text-xs font-medium ${scopeTab === tab ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}
+                  onClick={() => setScopeTab(tab)}
+                >
+                  {tab === 'ALL' ? 'All' : tab}
+                </button>
+              ))}
+            </div>
+            <select
+              className="rounded-lg border border-bordercard bg-white px-3 py-2 text-sm"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              aria-label="Filter by status"
+            >
+              <option value="">All statuses</option>
+              <option value="TODO">To do</option>
+              <option value="IN_PROGRESS">In progress</option>
+              <option value="IN_REVIEW">In review</option>
+              <option value="DONE">Done</option>
+            </select>
+          </div>
         </div>
         {loading ? (
           <div className="grid gap-3 md:grid-cols-2">
@@ -116,9 +156,9 @@ export default function DashboardPage() {
               <div key={i} className="h-36 animate-pulse rounded-lg bg-slate-200/90" />
             ))}
           </div>
-        ) : tasksPage?.content?.length ? (
+        ) : scopedTasks.length ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {tasksPage.content.map((t) => (
+            {scopedTasks.map((t) => (
               <TaskCard
                 key={t.id}
                 task={t}
@@ -136,7 +176,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
-                onClick={() => setCreateTaskOpen(true)}
+                onClick={() => openCreateTask()}
               >
                 Create your first task
               </button>

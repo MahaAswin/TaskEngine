@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.taskengine.backend.api.ApiErrorResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -72,7 +73,7 @@ public class GlobalExceptionHandler {
                 .build());
   }
 
-  @ExceptionHandler({BadRequestException.class, BadCredentialsException.class})
+  @ExceptionHandler({BadRequestException.class, BadCredentialsException.class, HttpMessageNotReadableException.class})
   public ResponseEntity<ApiErrorResponse> handleBadRequest(RuntimeException ex) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
         .body(

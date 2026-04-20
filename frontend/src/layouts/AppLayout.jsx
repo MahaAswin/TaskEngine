@@ -8,10 +8,12 @@ import MobileTabBar from '../components/MobileTabBar';
 import { AppShellSkeleton } from '../components/skeletons';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAppKeyboardShortcuts } from '../hooks/useAppKeyboardShortcuts';
+import { useSSENotifications } from '../hooks/useSSENotifications';
 
 export default function AppLayout() {
   const { data: user, isLoading, isError } = useCurrentUser();
   useAppKeyboardShortcuts();
+  useSSENotifications(!!user);
 
   if (isError) {
     return <Navigate to="/login" replace />;

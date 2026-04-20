@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
 import com.taskengine.backend.dto.ChangePasswordRequest;
 import com.taskengine.backend.dto.PatchUserRoleRequest;
 import com.taskengine.backend.dto.UpdateProfileRequest;
@@ -32,6 +33,12 @@ public class UserController {
   @Operation(summary = "Current user profile")
   public UserMeResponse me() {
     return userService.getCurrentUserProfile();
+  }
+
+  @GetMapping
+  @Operation(summary = "List all users in organization")
+  public List<UserMeResponse> listUsers() {
+    return userService.listOrganizationUsers();
   }
 
   @PatchMapping("/me/profile")

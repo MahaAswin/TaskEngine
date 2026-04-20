@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 import com.taskengine.backend.entity.TaskPriority;
+import com.taskengine.backend.entity.TaskScope;
 import com.taskengine.backend.entity.TaskStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,6 +18,8 @@ public class TaskResponse {
   private final String description;
   private final TaskStatus status;
   private final TaskPriority priority;
+  private final TaskScope scope;
+  private final UUID teamId;
   private final UUID createdBy;
   private final String createdByName;
   private final String createdByEmail;

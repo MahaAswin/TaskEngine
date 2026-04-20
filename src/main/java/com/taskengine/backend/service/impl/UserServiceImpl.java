@@ -1,6 +1,8 @@
 package com.taskengine.backend.service.impl;
 
 import java.util.UUID;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,25 @@ public class UserServiceImpl implements UserService {
         .organizationName(o.getName())
         .organizationSlug(o.getSlug())
         .build();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<UserMeResponse> listOrganizationUsers() {
+    User u = securityUtils.getCurrentUser();
+    var org = u.getOrganization();
+    return userRepository.findByOrganization_IdOrderByFullNameAsc(org.getId()).stream()
+        .map(user -> UserMeResponse.builder()
+            .id(user.getId())
+            .email(user.getEmail())
+            .fullName(user.getFullName())
+            .role(user.getRole())
+            .avatarUrl(user.getAvatarUrl())
+            .organizationId(org.getId())
+            .organizationName(org.getName())
+            .organizationSlug(org.getSlug())
+            .build())
+        .collect(Collectors.toList());
   }
 
   @Override

@@ -23,7 +23,7 @@ export default function TasksPage() {
   const navigate = useNavigate();
   const { user } = useOutletContext();
   const jwtRole = useAuthStore((s) => s.jwtRole);
-  const setCreateTaskOpen = useUiStore((s) => s.setCreateTaskOpen);
+  const openCreateTask = useUiStore((s) => s.openCreateTask);
   const setTaskDrawerId = useUiStore((s) => s.setTaskDrawerId);
   const openConfirm = useUiStore((s) => s.openConfirm);
   const qc = useQueryClient();
@@ -227,7 +227,7 @@ export default function TasksPage() {
                   <button
                     type="button"
                     className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
-                    onClick={() => setCreateTaskOpen(true)}
+                    onClick={() => openCreateTask()}
                   >
                     Create your first task
                   </button>

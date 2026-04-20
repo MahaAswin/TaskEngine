@@ -1,8 +1,9 @@
-import { Bell, ChevronDown, LogOut, User } from 'lucide-react';
+import { ChevronDown, LogOut, User } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
+import NotificationBell from './NotificationBell';
 
 export default function TopBar({ user }) {
   const [open, setOpen] = useState(false);
@@ -47,13 +48,7 @@ export default function TopBar({ user }) {
           >
             {role}
           </span>
-          <button
-            type="button"
-            className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5" />
-          </button>
+          <NotificationBell />
           <div className="relative" ref={ref}>
             <button
               type="button"

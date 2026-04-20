@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
+import { Globe, Users, Lock } from 'lucide-react';
 
 const actionBorder = {
   CREATED: 'border-l-green-500',
@@ -6,6 +7,8 @@ const actionBorder = {
   STATUS_CHANGED: 'border-l-sky-500',
   ASSIGNED: 'border-l-amber-500',
   DELETED: 'border-l-red-500',
+  SCOPE_CHANGED: 'border-l-indigo-500',
+  TEAM_CHANGED: 'border-l-violet-500',
 };
 
 function formatStatus(s) {
@@ -31,6 +34,10 @@ function describeChange(entry) {
     }
     case 'DELETED':
       return `${name} deleted this task`;
+    case 'SCOPE_CHANGED':
+      return `${name} changed visibility from ${oldV.scope ?? 'UNKNOWN'} to ${newV.scope ?? 'UNKNOWN'}`;
+    case 'TEAM_CHANGED':
+      return `${name} moved this task to another team`;
     case 'UPDATED': {
       const descChanged =
         oldV.description !== undefined &&
@@ -51,6 +58,13 @@ function describeChange(entry) {
     default:
       return `${name} modified this task`;
   }
+}
+
+function ScopeIcon({ scope }) {
+  if (scope === 'GLOBAL') return <Globe className="h-4 w-4 text-blue-600" />;
+  if (scope === 'TEAM') return <Users className="h-4 w-4 text-indigo-600" />;
+  if (scope === 'PRIVATE') return <Lock className="h-4 w-4 text-purple-600" />;
+  return null;
 }
 
 function Avatar({ name, url }) {
@@ -111,6 +125,12 @@ export default function ActivityTimeline({ entries }) {
                   >
                     {describeChange(entry)}
                   </p>
+                  {entry.action === 'SCOPE_CHANGED' && (
+                    <div className="mt-1 inline-flex items-center gap-2 text-xs text-slate-500">
+                      <ScopeIcon scope={entry.newValue?.scope} />
+                      <span>{entry.newValue?.scope ?? 'Unknown scope'}</span>
+                    </div>
+                  )}
                   <p className="mt-1 text-xs text-slate-500" title={new Date(entry.timestamp).toLocaleString()}>
                     {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true })}
                   </p>

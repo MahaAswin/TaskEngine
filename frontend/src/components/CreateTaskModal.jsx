@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { X, Loader2, Globe, Users, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import { useUiStore } from '../stores/uiStore';
 
 export default function CreateTaskModal({ user }) {
   const open = useUiStore((s) => s.createTaskOpen);
-  const setOpen = useUiStore((s) => s.setCreateTaskOpen);
+  const draft = useUiStore((s) => s.createTaskDraft);
+  const closeCreateTask = useUiStore((s) => s.closeCreateTask);
   const qc = useQueryClient();
   const isAdmin = user?.role === 'ADMIN';
 
@@ -16,9 +17,38 @@ export default function CreateTaskModal({ user }) {
     description: '',
     status: 'TODO',
     priority: 'MEDIUM',
+    scope: isAdmin ? 'GLOBAL' : 'PRIVATE',
+    teamId: '',
     dueDate: '',
     assignedToId: '',
   });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ['teams'],
+    queryFn: async () => {
+      const { data } = await api.get('/teams');
+      return data;
+    },
+    enabled: open,
+  });
+
+  const { data: orgUsers = [] } = useQuery({
+    queryKey: ['org-users'],
+    queryFn: async () => {
+      const { data } = await api.get('/users');
+      return data;
+    },
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setForm((prev) => ({
+      ...prev,
+      scope: isAdmin ? 'GLOBAL' : 'PRIVATE',
+      ...(draft ?? {}),
+    }));
+  }, [open, draft, isAdmin]);
 
   const create = useMutation({
     mutationFn: (payload) => api.post('/tasks', payload, { skipGlobalErrorToast: true }),
@@ -26,12 +56,14 @@ export default function CreateTaskModal({ user }) {
       toast.success('Task created successfully');
       qc.invalidateQueries({ queryKey: ['tasks'] });
       qc.invalidateQueries({ queryKey: ['task-stats'] });
-      setOpen(false);
+      closeCreateTask();
       setForm({
         title: '',
         description: '',
         status: 'TODO',
         priority: 'MEDIUM',
+        scope: isAdmin ? 'GLOBAL' : 'PRIVATE',
+        teamId: '',
         dueDate: '',
         assignedToId: '',
       });
@@ -43,16 +75,24 @@ export default function CreateTaskModal({ user }) {
 
   if (!open) return null;
 
+  const close = () => {
+    closeCreateTask();
+  };
+
   const submit = (e) => {
     e.preventDefault();
     const aid = String(form.assignedToId).trim();
+    const teamId = String(form.teamId || '').trim();
+    const scope = form.scope || 'PRIVATE';
     create.mutate({
       title: form.title,
       description: form.description || undefined,
       status: form.status,
       priority: form.priority,
+      scope,
+      teamId: scope === 'TEAM' ? teamId || null : null,
       dueDate: form.dueDate || null,
-      assignedToId: isAdmin && aid ? aid : null,
+      assignedToId: aid ? aid : null,
     });
   };
 
@@ -65,7 +105,7 @@ export default function CreateTaskModal({ user }) {
         type="button"
         className="absolute inset-0 cursor-default"
         aria-label="Close dialog"
-        onClick={() => setOpen(false)}
+        onClick={close}
       />
       <div
         role="dialog"
@@ -81,7 +121,7 @@ export default function CreateTaskModal({ user }) {
             type="button"
             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
             aria-label="Close"
-            onClick={() => setOpen(false)}
+            onClick={close}
           >
             <X className="h-5 w-5" />
           </button>
@@ -147,6 +187,58 @@ export default function CreateTaskModal({ user }) {
               </div>
             </div>
             <div>
+              <p className="text-sm font-medium text-slate-700">Visibility</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className={`rounded-lg border p-3 text-left text-sm ${form.scope === 'GLOBAL' ? 'border-blue-500 bg-blue-50' : 'border-bordercard'}`}
+                    onClick={() => setForm((f) => ({ ...f, scope: 'GLOBAL', teamId: '' }))}
+                  >
+                    <Globe className="mb-1 h-4 w-4 text-blue-600" />
+                    Global
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`rounded-lg border p-3 text-left text-sm ${form.scope === 'TEAM' ? 'border-indigo-500 bg-indigo-50' : 'border-bordercard'}`}
+                  onClick={() => setForm((f) => ({ ...f, scope: 'TEAM' }))}
+                >
+                  <Users className="mb-1 h-4 w-4 text-indigo-600" />
+                  Team
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-lg border p-3 text-left text-sm ${form.scope === 'PRIVATE' ? 'border-purple-500 bg-purple-50' : 'border-bordercard'}`}
+                  onClick={() => setForm((f) => ({ ...f, scope: 'PRIVATE', teamId: '' }))}
+                >
+                  <Lock className="mb-1 h-4 w-4 text-purple-600" />
+                  Private
+                </button>
+              </div>
+            </div>
+            {form.scope === 'TEAM' && (
+              <div>
+                <label htmlFor="ct-team" className="text-sm font-medium text-slate-700">
+                  Team
+                </label>
+                <select
+                  id="ct-team"
+                  required
+                  className="mt-1 w-full rounded-lg border border-bordercard px-3 py-2 text-sm"
+                  value={form.teamId}
+                  onChange={(e) => setForm((f) => ({ ...f, teamId: e.target.value }))}
+                >
+                  <option value="">Select a team</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
               <label htmlFor="ct-due" className="text-sm font-medium text-slate-700">
                 Due date
               </label>
@@ -158,26 +250,32 @@ export default function CreateTaskModal({ user }) {
                 onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
               />
             </div>
-            {isAdmin && (
+            <div>
               <div>
                 <label htmlFor="ct-assign" className="text-sm font-medium text-slate-700">
-                  Assignee user ID
+                  Assignee
                 </label>
-                <input
+                <select
                   id="ct-assign"
-                  className="mt-1 w-full rounded-lg border border-bordercard px-3 py-2 font-mono text-xs"
+                  className="mt-1 w-full rounded-lg border border-bordercard px-3 py-2 text-sm"
                   value={form.assignedToId}
                   onChange={(e) => setForm((f) => ({ ...f, assignedToId: e.target.value }))}
-                  placeholder="Optional UUID"
-                />
+                >
+                  <option value="">Unassigned</option>
+                  {orgUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName} ({u.email})
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+            </div>
           </div>
           <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
             <button
               type="button"
               className="rounded-lg border border-bordercard px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              onClick={() => setOpen(false)}
+              onClick={close}
             >
               Cancel
             </button>

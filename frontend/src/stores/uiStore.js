@@ -6,7 +6,10 @@ export const useUiStore = create((set) => ({
   closeConfirm: () => set({ confirm: null }),
 
   createTaskOpen: false,
+  createTaskDraft: null,
   setCreateTaskOpen: (open) => set({ createTaskOpen: open }),
+  openCreateTask: (draft = null) => set({ createTaskOpen: true, createTaskDraft: draft }),
+  closeCreateTask: () => set({ createTaskOpen: false, createTaskDraft: null }),
 
   taskDrawerId: null,
   setTaskDrawerId: (id) => set({ taskDrawerId: id }),

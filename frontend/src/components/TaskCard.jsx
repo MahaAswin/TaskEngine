@@ -16,8 +16,15 @@ export default function TaskCard({ task, user, jwtRole, onDelete }) {
   const openConfirm = useUiStore((s) => s.openConfirm);
   const can = canMutateTask(user, task, jwtRole);
 
+  const scopeAccent =
+    task.scope === 'GLOBAL'
+      ? 'border-l-4 border-l-blue-500'
+      : task.scope === 'PRIVATE'
+        ? 'border-l-4 border-l-purple-500'
+        : 'border-l-4 border-l-indigo-500';
+
   return (
-    <div className="group relative w-full rounded-lg border border-bordercard bg-white text-left shadow-sm transition hover:border-slate-300 hover:shadow-md">
+    <div className={`group relative w-full rounded-lg border border-bordercard bg-white text-left shadow-sm transition hover:border-slate-300 hover:shadow-md ${scopeAccent}`}>
       <div
         role="link"
         tabIndex={0}
@@ -36,6 +43,7 @@ export default function TaskCard({ task, user, jwtRole, onDelete }) {
             <h3 className="font-semibold text-slate-900 line-clamp-2">{task.title}</h3>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <PriorityBadge priority={task.priority} />
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{task.scope}</span>
             </div>
           </div>
         </div>

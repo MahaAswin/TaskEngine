@@ -5,5 +5,7 @@ public enum TaskAuditAction {
   UPDATED,
   STATUS_CHANGED,
   ASSIGNED,
-  DELETED
+  DELETED,
+  SCOPE_CHANGED,
+  TEAM_CHANGED
 }

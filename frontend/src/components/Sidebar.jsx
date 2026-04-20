@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
-  ListTodo,
+  Globe,
   Users,
+  Lock,
   Settings,
 } from 'lucide-react';
 const linkClass = ({ isActive }) =>
@@ -28,14 +29,22 @@ export default function Sidebar({ isAdmin }) {
           <LayoutDashboard className="h-5 w-5 shrink-0" />
           Dashboard
         </NavLink>
-        <NavLink to="/tasks" className={linkClass}>
-          <ListTodo className="h-5 w-5 shrink-0" />
-          Tasks
+        <NavLink to="/global" className={linkClass}>
+          <Globe className="h-5 w-5 shrink-0" />
+          Global Board
+        </NavLink>
+        <NavLink to="/teams" className={linkClass}>
+          <Users className="h-5 w-5 shrink-0" />
+          My Teams
+        </NavLink>
+        <NavLink to="/private" className={linkClass}>
+          <Lock className="h-5 w-5 shrink-0" />
+          My Tasks
         </NavLink>
         {isAdmin && (
-          <NavLink to="/team" className={linkClass}>
+          <NavLink to="/teams/manage" className={linkClass}>
             <Users className="h-5 w-5 shrink-0" />
-            Team
+            Manage Teams
           </NavLink>
         )}
         <NavLink to="/settings" className={linkClass}>

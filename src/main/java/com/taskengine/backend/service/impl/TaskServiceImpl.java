@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -15,15 +14,17 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.taskengine.backend.dto.*;
 import com.taskengine.backend.entity.*;
 import com.taskengine.backend.exception.BadRequestException;
+import com.taskengine.backend.exception.PermissionDeniedException;
 import com.taskengine.backend.exception.ResourceNotFoundException;
 import com.taskengine.backend.repository.TaskAuditLogRepository;
 import com.taskengine.backend.repository.TaskRepository;
+import com.taskengine.backend.repository.TeamMemberRepository;
+import com.taskengine.backend.repository.TeamRepository;
 import com.taskengine.backend.repository.UserRepository;
-import com.taskengine.backend.repository.spec.TaskSpecifications;
-import com.taskengine.backend.security.TaskPermissionEvaluator;
-import com.taskengine.backend.security.UserPrincipal;
 import com.taskengine.backend.service.AuditLogService;
+import com.taskengine.backend.service.NotificationService;
 import com.taskengine.backend.service.TaskService;
+import com.taskengine.backend.service.TaskVisibilityService;
 import com.taskengine.backend.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 
@@ -35,26 +36,86 @@ public class TaskServiceImpl implements TaskService {
   private final TaskAuditLogRepository taskAuditLogRepository;
   private final AuditLogService auditLogService;
   private final UserRepository userRepository;
+  private final TeamRepository teamRepository;
+  private final TeamMemberRepository teamMemberRepository;
   private final SecurityUtils securityUtils;
-  private final TaskPermissionEvaluator taskPermissionEvaluator;
+  private final TaskVisibilityService taskVisibilityService;
+  private final NotificationService notificationService;
+  private static final TaskScope GLOBAL_SCOPE = TaskScope.GLOBAL;
+  private static final TaskScope TEAM_SCOPE = TaskScope.TEAM;
+  private static final TaskScope PRIVATE_SCOPE = TaskScope.PRIVATE;
 
   @Override
   @Transactional(readOnly = true)
   public TaskStatsResponse getTaskStats() {
     User user = securityUtils.getCurrentUser();
-    Specification<Task> base =
-        TaskSpecifications.forUserRole(
-                user.getOrganization().getId(), user.getRole(), user.getId())
-            .and(TaskSpecifications.notDeleted());
-    long total = taskRepository.count(base);
+    UUID orgId = user.getOrganization().getId();
+    UUID userId = user.getId();
+    boolean isAdmin = user.getRole() == UserRole.ADMIN;
+    long total =
+        taskRepository
+            .findVisibleTasksNoStatusNoSearch(
+                orgId,
+                userId,
+                isAdmin,
+                GLOBAL_SCOPE,
+                TEAM_SCOPE,
+                PRIVATE_SCOPE,
+                null,
+                Pageable.unpaged())
+            .getTotalElements();
     long todo =
-        taskRepository.count(base.and(TaskSpecifications.optionalStatus(TaskStatus.TODO)));
+        taskRepository
+            .findVisibleTasksNoSearch(
+                orgId,
+                userId,
+                isAdmin,
+                GLOBAL_SCOPE,
+                TEAM_SCOPE,
+                PRIVATE_SCOPE,
+                TaskStatus.TODO,
+                null,
+                Pageable.unpaged())
+            .getTotalElements();
     long inProgress =
-        taskRepository.count(base.and(TaskSpecifications.optionalStatus(TaskStatus.IN_PROGRESS)));
+        taskRepository
+            .findVisibleTasksNoSearch(
+                orgId,
+                userId,
+                isAdmin,
+                GLOBAL_SCOPE,
+                TEAM_SCOPE,
+                PRIVATE_SCOPE,
+                TaskStatus.IN_PROGRESS,
+                null,
+                Pageable.unpaged())
+            .getTotalElements();
     long inReview =
-        taskRepository.count(base.and(TaskSpecifications.optionalStatus(TaskStatus.IN_REVIEW)));
+        taskRepository
+            .findVisibleTasksNoSearch(
+                orgId,
+                userId,
+                isAdmin,
+                GLOBAL_SCOPE,
+                TEAM_SCOPE,
+                PRIVATE_SCOPE,
+                TaskStatus.IN_REVIEW,
+                null,
+                Pageable.unpaged())
+            .getTotalElements();
     long done =
-        taskRepository.count(base.and(TaskSpecifications.optionalStatus(TaskStatus.DONE)));
+        taskRepository
+            .findVisibleTasksNoSearch(
+                orgId,
+                userId,
+                isAdmin,
+                GLOBAL_SCOPE,
+                TEAM_SCOPE,
+                PRIVATE_SCOPE,
+                TaskStatus.DONE,
+                null,
+                Pageable.unpaged())
+            .getTotalElements();
     return TaskStatsResponse.builder()
         .total(total)
         .todo(todo)
@@ -68,22 +129,70 @@ public class TaskServiceImpl implements TaskService {
   @Transactional(readOnly = true)
   public Page<TaskResponse> searchTasks(
       TaskStatus status,
-      TaskPriority priority,
-      UUID assignedTo,
+      UUID teamId,
       String search,
       Pageable pageable) {
     User user = securityUtils.getCurrentUser();
-    UUID orgId = user.getOrganization().getId();
     String q = search == null || search.isBlank() ? null : search.trim();
-    Specification<Task> spec =
-        TaskSpecifications.withFetchUsers()
-            .and(TaskSpecifications.forUserRole(orgId, user.getRole(), user.getId()))
-            .and(TaskSpecifications.notDeleted())
-            .and(TaskSpecifications.optionalStatus(status))
-            .and(TaskSpecifications.optionalPriority(priority))
-            .and(TaskSpecifications.optionalAssignedTo(assignedTo))
-            .and(TaskSpecifications.search(q));
-    return taskRepository.findAll(spec, pageable).map(this::toDto);
+    boolean isAdmin = user.getRole() == UserRole.ADMIN;
+    UUID orgId = user.getOrganization().getId();
+    UUID userId = user.getId();
+    // Visibility is enforced in repository queries (org + scope + creator/assignee/team rules)
+    // so pagination/sorting remain DB-backed and consistent.
+    if (status == null && q == null) {
+      return taskRepository
+          .findVisibleTasksNoStatusNoSearch(
+              orgId,
+              userId,
+              isAdmin,
+              GLOBAL_SCOPE,
+              TEAM_SCOPE,
+              PRIVATE_SCOPE,
+              teamId,
+              pageable)
+          .map(this::toDto);
+    }
+    if (status == null) {
+      return taskRepository
+          .findVisibleTasksNoStatus(
+              orgId,
+              userId,
+              isAdmin,
+              GLOBAL_SCOPE,
+              TEAM_SCOPE,
+              PRIVATE_SCOPE,
+              teamId,
+              q,
+              pageable)
+          .map(this::toDto);
+    }
+    if (q == null) {
+      return taskRepository
+          .findVisibleTasksNoSearch(
+              orgId,
+              userId,
+              isAdmin,
+              GLOBAL_SCOPE,
+              TEAM_SCOPE,
+              PRIVATE_SCOPE,
+              status,
+              teamId,
+              pageable)
+          .map(this::toDto);
+    }
+    return taskRepository
+        .findVisibleTasks(
+            orgId,
+            userId,
+            isAdmin,
+            GLOBAL_SCOPE,
+            TEAM_SCOPE,
+            PRIVATE_SCOPE,
+            status,
+            teamId,
+            q,
+            pageable)
+        .map(this::toDto);
   }
 
   @Override
@@ -94,7 +203,7 @@ public class TaskServiceImpl implements TaskService {
         taskRepository
             .findByIdAndOrganizationIdWithUsers(taskId, user.getOrganization().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
-    taskPermissionEvaluator.assertCanRead(task, securityUtils.getCurrentPrincipal());
+    assertCanView(task, user);
     return toDto(task);
   }
 
@@ -102,10 +211,6 @@ public class TaskServiceImpl implements TaskService {
   @Transactional
   public TaskResponse createTask(TaskRequest request) {
     User user = securityUtils.getCurrentUser();
-    UserPrincipal principal = securityUtils.getCurrentPrincipal();
-    if (request.getAssignedToId() != null) {
-      taskPermissionEvaluator.assertCanAssign(principal);
-    }
     Task task = new Task();
     task.setOrganization(user.getOrganization());
     task.setCreatedBy(user);
@@ -114,8 +219,11 @@ public class TaskServiceImpl implements TaskService {
     task.setStatus(request.getStatus());
     task.setPriority(request.getPriority());
     task.setDueDate(request.getDueDate());
+    applyScopeRules(task, request, user);
     if (request.getAssignedToId() != null) {
-      task.setAssignedTo(resolveAssignee(request.getAssignedToId(), user.getOrganization().getId()));
+      User assignee = resolveAssignee(request.getAssignedToId(), user.getOrganization().getId());
+      validateAssigneeForScope(task, assignee);
+      task.setAssignedTo(assignee);
     }
     Task saved = taskRepository.save(task);
     scheduleAuditAfterCommit(
@@ -124,6 +232,13 @@ public class TaskServiceImpl implements TaskService {
         TaskAuditAction.CREATED,
         null,
         fullTaskSnapshot(saved));
+    notificationService.pushToOrg(
+        user.getOrganization().getId(),
+        "TASK_CREATED",
+        Map.of(
+            "taskId", saved.getId().toString(),
+            "title", saved.getTitle(),
+            "createdBy", user.getFullName()));
     return toDto(saved);
   }
 
@@ -131,43 +246,55 @@ public class TaskServiceImpl implements TaskService {
   @Transactional
   public TaskResponse updateTask(UUID taskId, TaskRequest request) {
     User user = securityUtils.getCurrentUser();
-    UserPrincipal principal = securityUtils.getCurrentPrincipal();
     Task task =
         taskRepository
             .findByIdAndOrganizationIdWithUsers(taskId, user.getOrganization().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
-    taskPermissionEvaluator.assertCanWrite(task, principal);
+    assertCanMutate(task, user);
     if (task.isDeleted()) {
       throw new BadRequestException("Task is deleted");
     }
     Map<String, Object> before = fullTaskSnapshot(task);
 
     TaskStatus prevStatus = task.getStatus();
+    TaskScope prevScope = task.getScope();
+    UUID prevTeamId = task.getTeam() != null ? task.getTeam().getId() : null;
     UUID prevAssignee =
         task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
-
-    UUID newAssigneeId = request.getAssignedToId();
-    boolean assigneeChanged =
-        (prevAssignee == null && newAssigneeId != null)
-            || (prevAssignee != null && !prevAssignee.equals(newAssigneeId));
-    taskPermissionEvaluator.assertAssigneeChangeAllowed(principal, assigneeChanged);
 
     task.setTitle(request.getTitle());
     task.setDescription(request.getDescription());
     task.setStatus(request.getStatus());
     task.setPriority(request.getPriority());
     task.setDueDate(request.getDueDate());
+    applyScopeRules(task, request, user);
     if (request.getAssignedToId() != null) {
-      task.setAssignedTo(resolveAssignee(request.getAssignedToId(), user.getOrganization().getId()));
+      User assignee = resolveAssignee(request.getAssignedToId(), user.getOrganization().getId());
+      validateAssigneeForScope(task, assignee);
+      task.setAssignedTo(assignee);
     } else {
       task.setAssignedTo(null);
     }
 
+    UUID newAssigneeId = request.getAssignedToId();
+    boolean assigneeChanged =
+        (prevAssignee == null && newAssigneeId != null)
+            || (prevAssignee != null && !prevAssignee.equals(newAssigneeId));
+
     Task saved = taskRepository.save(task);
+    UUID newTeamId = saved.getTeam() != null ? saved.getTeam().getId() : null;
+    boolean scopeChanged = prevScope != saved.getScope();
+    boolean teamChanged =
+        (prevTeamId == null && newTeamId != null)
+            || (prevTeamId != null && !prevTeamId.equals(newTeamId));
 
     boolean statusChanged = prevStatus != request.getStatus();
     TaskAuditAction action = TaskAuditAction.UPDATED;
-    if (statusChanged) {
+    if (scopeChanged) {
+      action = TaskAuditAction.SCOPE_CHANGED;
+    } else if (teamChanged) {
+      action = TaskAuditAction.TEAM_CHANGED;
+    } else if (statusChanged) {
       action = TaskAuditAction.STATUS_CHANGED;
     } else if (assigneeChanged) {
       action = TaskAuditAction.ASSIGNED;
@@ -176,6 +303,10 @@ public class TaskServiceImpl implements TaskService {
     TaskAuditAction finalAction = action;
     scheduleAuditAfterCommit(
         saved.getId(), user.getId(), finalAction, before, fullTaskSnapshot(saved));
+    notificationService.pushToOrg(
+        user.getOrganization().getId(),
+        "TASK_UPDATED",
+        Map.of("taskId", saved.getId().toString(), "title", saved.getTitle()));
     return toDto(saved);
   }
 
@@ -187,7 +318,7 @@ public class TaskServiceImpl implements TaskService {
         taskRepository
             .findByIdAndOrganizationIdWithUsers(taskId, user.getOrganization().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
-    taskPermissionEvaluator.assertCanWrite(task, securityUtils.getCurrentPrincipal());
+    assertCanMutate(task, user);
     if (task.isDeleted()) {
       throw new BadRequestException("Task is deleted");
     }
@@ -204,6 +335,10 @@ public class TaskServiceImpl implements TaskService {
         TaskAuditAction.STATUS_CHANGED,
         before,
         fullTaskSnapshot(saved));
+    notificationService.pushToOrg(
+        user.getOrganization().getId(),
+        "TASK_STATUS_CHANGED",
+        Map.of("taskId", saved.getId().toString(), "newStatus", saved.getStatus().name()));
     return toDto(saved);
   }
 
@@ -215,7 +350,7 @@ public class TaskServiceImpl implements TaskService {
         taskRepository
             .findByIdAndOrganizationIdWithUsers(taskId, user.getOrganization().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
-    taskPermissionEvaluator.assertCanDelete(task, securityUtils.getCurrentPrincipal());
+    assertCanMutate(task, user);
     if (task.isDeleted()) {
       return;
     }
@@ -229,18 +364,21 @@ public class TaskServiceImpl implements TaskService {
         TaskAuditAction.DELETED,
         before,
         fullTaskSnapshot(saved));
+    notificationService.pushToOrg(
+        user.getOrganization().getId(),
+        "TASK_DELETED",
+        Map.of("taskId", saved.getId().toString()));
   }
 
   @Override
   @Transactional
   public TaskResponse restoreTask(UUID taskId) {
     User user = securityUtils.getCurrentUser();
-    UserPrincipal principal = securityUtils.getCurrentPrincipal();
     Task task =
         taskRepository
             .findByIdAndOrganizationIdWithUsers(taskId, user.getOrganization().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
-    taskPermissionEvaluator.assertCanWrite(task, principal);
+    assertCanMutate(task, user);
     if (!task.isDeleted()) {
       throw new BadRequestException("Task is not deleted");
     }
@@ -265,7 +403,7 @@ public class TaskServiceImpl implements TaskService {
         taskRepository
             .findByIdAndOrganizationIdWithUsers(taskId, user.getOrganization().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Task not found"));
-    taskPermissionEvaluator.assertCanRead(task, securityUtils.getCurrentPrincipal());
+    assertCanView(task, user);
     return taskAuditLogRepository
         .findByTaskIdAndOrgId(taskId, user.getOrganization().getId())
         .stream()
@@ -305,6 +443,8 @@ public class TaskServiceImpl implements TaskService {
     m.put("organizationId", t.getOrganization().getId().toString());
     m.put("title", t.getTitle());
     m.put("description", t.getDescription());
+    m.put("scope", t.getScope().name());
+    m.put("teamId", t.getTeam() != null ? t.getTeam().getId().toString() : null);
     m.put("status", t.getStatus().name());
     m.put("priority", t.getPriority().name());
     m.put("dueDate", t.getDueDate() != null ? t.getDueDate().toString() : null);
@@ -330,6 +470,8 @@ public class TaskServiceImpl implements TaskService {
         .description(task.getDescription())
         .status(task.getStatus())
         .priority(task.getPriority())
+        .scope(task.getScope())
+        .teamId(task.getTeam() != null ? task.getTeam().getId() : null)
         .createdBy(cb.getId())
         .createdByName(cb.getFullName())
         .createdByEmail(cb.getEmail())
@@ -345,6 +487,61 @@ public class TaskServiceImpl implements TaskService {
         .deleted(task.isDeleted())
         .deletedAt(task.getDeletedAt())
         .build();
+  }
+
+  private void applyScopeRules(Task task, TaskRequest request, User currentUser) {
+    TaskScope requestedScope = request.getScope();
+    if (requestedScope == TaskScope.GLOBAL) {
+      if (currentUser.getRole() != UserRole.ADMIN) {
+        throw new PermissionDeniedException("Only organization admins can create GLOBAL tasks");
+      }
+      task.setScope(TaskScope.GLOBAL);
+      task.setTeam(null);
+      return;
+    }
+    if (requestedScope == TaskScope.TEAM) {
+      if (request.getTeamId() == null) {
+        throw new BadRequestException("TEAM scope requires teamId");
+      }
+      Team team =
+          teamRepository
+              .findByIdAndOrgId(request.getTeamId(), currentUser.getOrganization().getId())
+              .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
+      task.setScope(TaskScope.TEAM);
+      task.setTeam(team);
+      return;
+    }
+    task.setScope(TaskScope.PRIVATE);
+    task.setTeam(null);
+  }
+
+  private void validateAssigneeForScope(Task task, User assignee) {
+    if (task.getScope() != TaskScope.TEAM) {
+      return;
+    }
+    UUID teamId = task.getTeam() != null ? task.getTeam().getId() : null;
+    if (teamId == null || !teamMemberRepository.existsByTeamIdAndUserId(teamId, assignee.getId())) {
+      throw new BadRequestException("Assignee must be a member of the task team");
+    }
+  }
+
+  private void assertCanView(Task task, User user) {
+    if (!taskVisibilityService.canView(task, user)) {
+      throw new PermissionDeniedException("You do not have access to this task");
+    }
+  }
+
+  private void assertCanMutate(Task task, User user) {
+    if (!task.getOrganization().getId().equals(user.getOrganization().getId())) {
+      throw new ResourceNotFoundException("Task not found");
+    }
+    if (user.getRole() == UserRole.ADMIN) {
+      return;
+    }
+    if (task.getCreatedBy().getId().equals(user.getId())) {
+      return;
+    }
+    throw new PermissionDeniedException("You do not have permission");
   }
 
   private TaskHistoryEntryResponse toHistoryDto(TaskAuditLog log) {
