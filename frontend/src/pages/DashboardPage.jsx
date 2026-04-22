@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useOutletContext } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import TaskCard from '../components/TaskCard';
@@ -17,7 +19,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState('');
   const [scopeTab, setScopeTab] = useState('ALL');
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsError, error: statsErrObj } = useQuery({
     queryKey: ['task-stats'],
     queryFn: async () => {
       const { data } = await api.get('/tasks/stats');
@@ -25,7 +27,7 @@ export default function DashboardPage() {
     },
   });
 
-  const { data: tasksPage, isLoading: tasksLoading } = useQuery({
+  const { data: tasksPage, isLoading: tasksLoading, isError: tasksError, error: tasksErrObj } = useQuery({
     queryKey: ['tasks', 'dash', status],
     queryFn: async () => {
       const params = new URLSearchParams({ page: '0', size: '8', sort: 'createdAt,desc' });
@@ -98,6 +100,12 @@ export default function DashboardPage() {
   });
 
   const loading = statsLoading || tasksLoading;
+  const chartData = [
+    { name: 'Todo', value: stats?.todo || 0 },
+    { name: 'In Progress', value: stats?.inProgress || 0 },
+    { name: 'In Review', value: stats?.inReview || 0 },
+    { name: 'Done', value: stats?.done || 0 },
+  ];
 
   return (
     <div className="space-y-8">
@@ -107,19 +115,53 @@ export default function DashboardPage() {
       </div>
       {statsLoading ? (
         <StatCardsSkeleton />
+      ) : statsError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Could not load dashboard stats: {statsErrObj?.normalized?.message || statsErrObj?.message || 'Unknown error'}
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map((c) => (
-            <div
+            <motion.div
               key={c.label}
-              className="rounded-lg border border-bordercard bg-white p-4 shadow-sm"
+              whileHover={{ y: -3, scale: 1.01 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+              className="rounded-2xl border border-white/50 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.08)] backdrop-blur"
             >
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{c.label}</p>
               <p className={`mt-2 text-3xl font-semibold ${c.tone}`}>{c.value}</p>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
+      <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]">
+        <div className="rounded-2xl border border-bordercard bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-800">Status Overview</h3>
+          <div className="mt-3 h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <XAxis dataKey="name" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#2563eb" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-bordercard bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-500 p-5 text-white shadow-xl">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-100">Activity Feed</h3>
+          <div className="mt-4 space-y-3 text-sm">
+            {(tasksPage?.content || []).slice(0, 5).map((t) => (
+              <div key={t.id} className="rounded-lg bg-white/15 px-3 py-2 backdrop-blur">
+                <p className="font-medium">{t.title}</p>
+                <p className="text-xs text-blue-100">
+                  {t.scope} task by {t.createdByName}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       <div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">Recent tasks</h2>
@@ -156,6 +198,10 @@ export default function DashboardPage() {
               <div key={i} className="h-36 animate-pulse rounded-lg bg-slate-200/90" />
             ))}
           </div>
+        ) : tasksError ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Could not load tasks: {tasksErrObj?.normalized?.message || tasksErrObj?.message || 'Unknown error'}
+          </p>
         ) : scopedTasks.length ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {scopedTasks.map((t) => (

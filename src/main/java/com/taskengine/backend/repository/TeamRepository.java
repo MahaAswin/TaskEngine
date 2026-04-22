@@ -27,4 +27,9 @@ public interface TeamRepository extends JpaRepository<Team, UUID> {
   Optional<Team> findByIdAndOrgId(@Param("teamId") UUID teamId, @Param("orgId") UUID orgId);
 
   boolean existsByOrganization_IdAndNameIgnoreCase(UUID orgId, String name);
+
+  boolean existsByInviteCodeIgnoreCase(String inviteCode);
+
+  @EntityGraph(attributePaths = {"organization", "createdBy"})
+  Optional<Team> findByOrganization_IdAndInviteCodeIgnoreCase(UUID orgId, String inviteCode);
 }

@@ -11,6 +11,7 @@ import TeamDetailPage from './pages/TeamDetailPage';
 import GlobalBoardPage from './pages/GlobalBoardPage';
 import PrivateTasksPage from './pages/PrivateTasksPage';
 import SettingsPage from './pages/SettingsPage';
+import ChatPage from './pages/ChatPage';
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/teams/:teamId" element={<TeamDetailPage />} />
         <Route path="/teams/manage" element={<TeamPage />} />
         <Route path="/private" element={<PrivateTasksPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

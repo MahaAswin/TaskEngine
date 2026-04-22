@@ -8,13 +8,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(
-    name = "teams",
-    uniqueConstraints = {@UniqueConstraint(name = "uk_teams_org_name", columnNames = {"org_id", "name"})})
+@Table(name = "messages")
 @Getter
 @Setter
 @NoArgsConstructor
-public class Team {
+public class Message {
 
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
@@ -24,18 +22,16 @@ public class Team {
   @JoinColumn(name = "org_id", nullable = false)
   private Organization organization;
 
-  @Column(nullable = false, length = 100)
-  private String name;
-
-  @Column(columnDefinition = "TEXT")
-  private String description;
-
-  @Column(name = "invite_code", nullable = false, unique = true, length = 16)
-  private String inviteCode;
-
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "created_by", nullable = false)
-  private User createdBy;
+  @JoinColumn(name = "sender_id", nullable = false)
+  private User sender;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "receiver_id")
+  private User receiver;
+
+  @Column(nullable = false, columnDefinition = "TEXT")
+  private String content;
 
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;

@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 import { Link, useOutletContext } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../api/client';
 
 function AvatarGroup({ memberCount }) {
@@ -24,9 +26,19 @@ function AvatarGroup({ memberCount }) {
 
 export default function TeamsPage() {
   const { user } = useOutletContext();
+  const [inviteCode, setInviteCode] = useState('');
+  const qc = useQueryClient();
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ['teams'],
     queryFn: async () => (await api.get('/teams')).data,
+  });
+  const joinMutation = useMutation({
+    mutationFn: (code) => api.post('/teams/join', { inviteCode: code }),
+    onSuccess: () => {
+      setInviteCode('');
+      toast.success('Joined team');
+      qc.invalidateQueries({ queryKey: ['teams'] });
+    },
   });
 
   return (
@@ -42,6 +54,25 @@ export default function TeamsPage() {
           </Link>
         )}
       </div>
+      <div className="rounded-xl border border-bordercard bg-white p-4 shadow-sm">
+        <p className="text-sm font-medium text-slate-800">Join a team by invite code</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+            placeholder="Enter invite code"
+            className="rounded-lg border border-bordercard px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            disabled={!inviteCode.trim() || joinMutation.isPending}
+            onClick={() => joinMutation.mutate(inviteCode.trim())}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            Join Team
+          </button>
+        </div>
+      </div>
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2">{[1, 2, 3].map((i) => <div key={i} className="h-40 animate-pulse rounded-xl bg-slate-200" />)}</div>
       ) : teams.length ? (
@@ -51,6 +82,7 @@ export default function TeamsPage() {
               <h3 className="text-lg font-semibold text-slate-900">{team.name}</h3>
               <p className="mt-1 text-sm text-slate-500">{team.description || 'No description'}</p>
               <p className="mt-3 text-xs text-slate-500">{team.memberCount} members</p>
+              <p className="mt-1 text-xs text-slate-500">Invite code: {team.inviteCode}</p>
               <div className="mt-2">
                 <AvatarGroup memberCount={team.memberCount} />
               </div>

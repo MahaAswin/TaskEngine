@@ -17,5 +17,6 @@ public class TeamDetailResponse {
   private final UUID createdBy;
   private final Instant createdAt;
   private final TeamMemberRole myRole;
+  private final String inviteCode;
   private final List<TeamMemberResponse> members;
 }

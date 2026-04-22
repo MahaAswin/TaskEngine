@@ -5,7 +5,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/taskengine}
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:database}
+    password: ${DB_PASSWORD:password}
 
     driver-class-name: org.postgresql.Driver
 
@@ -31,6 +31,7 @@ spring:
           google:
             client-id: ${GOOGLE_CLIENT_ID:dummy-google-client-id}
             client-secret: ${GOOGLE_CLIENT_SECRET:dummy-google-client-secret}
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope:
               - openid
               - profile

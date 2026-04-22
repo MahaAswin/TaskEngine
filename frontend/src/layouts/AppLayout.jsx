@@ -26,7 +26,7 @@ export default function AppLayout() {
   const isAdmin = user?.role === 'ADMIN';
 
   return (
-    <div className="min-h-screen bg-slate-50 md:flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/60 to-indigo-100/50 md:flex">
       <Sidebar isAdmin={isAdmin} />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col pb-20 md:pb-0">
         <TopBar user={user} />
@@ -34,7 +34,7 @@ export default function AppLayout() {
           <Outlet context={{ user }} />
         </main>
       </div>
-      <MobileTabBar isAdmin={isAdmin} />
+      <MobileTabBar />
       <ConfirmModal />
       <CreateTaskModal user={user} />
       <TaskDrawer />

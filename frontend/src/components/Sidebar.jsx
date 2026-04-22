@@ -4,6 +4,7 @@ import {
   Globe,
   Users,
   Lock,
+  MessageCircle,
   Settings,
 } from 'lucide-react';
 const linkClass = ({ isActive }) =>
@@ -40,6 +41,10 @@ export default function Sidebar({ isAdmin }) {
         <NavLink to="/private" className={linkClass}>
           <Lock className="h-5 w-5 shrink-0" />
           My Tasks
+        </NavLink>
+        <NavLink to="/chat" className={linkClass}>
+          <MessageCircle className="h-5 w-5 shrink-0" />
+          Messages
         </NavLink>
         {isAdmin && (
           <NavLink to="/teams/manage" className={linkClass}>

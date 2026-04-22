@@ -11,12 +11,12 @@ export default function PrivateTasksPage() {
   const qc = useQueryClient();
   const openCreateTask = useUiStore((s) => s.openCreateTask);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['private-tasks'],
     queryFn: async () => {
-      const params = new URLSearchParams({ page: '0', size: '50' });
+      const params = new URLSearchParams({ page: '0', size: '50', scope: 'PRIVATE' });
       const { data } = await api.get(`/tasks?${params}`);
-      return (data.content || []).filter((t) => t.scope === 'PRIVATE');
+      return data.content || [];
     },
   });
 
@@ -45,6 +45,10 @@ export default function PrivateTasksPage() {
       </p>
       {isLoading ? (
         <div className="grid gap-3 md:grid-cols-2">{[1, 2, 3].map((i) => <div key={i} className="h-36 animate-pulse rounded-lg bg-slate-200" />)}</div>
+      ) : isError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Could not load private tasks: {error?.normalized?.message || error?.message || 'Unknown error'}
+        </p>
       ) : data?.length ? (
         <div className="grid gap-3 md:grid-cols-2">
           {data.map((task) => (

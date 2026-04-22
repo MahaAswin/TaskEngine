@@ -19,7 +19,13 @@ public class TaskVisibilityServiceImpl implements TaskVisibilityService {
 
   @Override
   public boolean canView(Task task, User user) {
-    if (!task.getOrganization().getId().equals(user.getOrganization().getId()) || task.isDeleted()) {
+    if (task.isDeleted()) {
+      return false;
+    }
+    if (task.getScope() == TaskScope.GLOBAL) {
+      return true;
+    }
+    if (!task.getOrganization().getId().equals(user.getOrganization().getId())) {
       return false;
     }
     // Assignees are allowed to access tasks assigned to them across scopes.

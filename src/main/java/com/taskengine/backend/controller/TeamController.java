@@ -34,6 +34,18 @@ public class TeamController {
     return teamService.createTeam(request);
   }
 
+  @GetMapping("/my")
+  @Operation(summary = "Get teams for current user")
+  public List<TeamResponse> getMyTeams() {
+    return teamService.listTeams();
+  }
+
+  @PostMapping("/join")
+  @Operation(summary = "Join team via invite code")
+  public TeamResponse joinTeam(@Valid @RequestBody JoinTeamRequest request) {
+    return teamService.joinTeamByInviteCode(request.getInviteCode());
+  }
+
   @GetMapping("/{teamId}")
   @Operation(summary = "Get team details with members")
   public TeamDetailResponse getTeam(@PathVariable UUID teamId) {

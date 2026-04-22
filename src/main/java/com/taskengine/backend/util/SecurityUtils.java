@@ -9,8 +9,10 @@ import com.taskengine.backend.exception.ForbiddenException;
 import com.taskengine.backend.repository.UserRepository;
 import com.taskengine.backend.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class SecurityUtils {
 
@@ -33,6 +35,16 @@ public class SecurityUtils {
     UserPrincipal p = getCurrentPrincipal();
     return userRepository
         .findByIdAndOrganizationId(p.getId(), p.getOrgId())
-        .orElseThrow(() -> new ForbiddenException("User not found in organization"));
+        .orElseGet(
+            () -> {
+              // Compatibility fallback for stale JWT orgId claims after migrations or tenant changes.
+              log.warn(
+                  "Principal orgId mismatch for userId={}, tokenOrgId={}. Falling back to user lookup by id.",
+                  p.getId(),
+                  p.getOrgId());
+              return userRepository
+                  .findByIdWithOrganization(p.getId())
+                  .orElseThrow(() -> new ForbiddenException("Authenticated user no longer exists"));
+            });
   }
 }

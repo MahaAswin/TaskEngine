@@ -17,4 +17,6 @@ public interface AuthService {
   void logoutWithToken(String refreshToken);
 
   AuthResponse oauthCallback(OAuth2CallbackRequest request);
+
+  AuthResponse oauthLogin(String googleSub, String email, String fullName, String avatarUrl);
 }

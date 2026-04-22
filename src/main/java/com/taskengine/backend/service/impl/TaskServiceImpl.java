@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -21,14 +22,17 @@ import com.taskengine.backend.repository.TaskRepository;
 import com.taskengine.backend.repository.TeamMemberRepository;
 import com.taskengine.backend.repository.TeamRepository;
 import com.taskengine.backend.repository.UserRepository;
+import com.taskengine.backend.repository.spec.TaskSpecifications;
 import com.taskengine.backend.service.AuditLogService;
 import com.taskengine.backend.service.NotificationService;
 import com.taskengine.backend.service.TaskService;
 import com.taskengine.backend.service.TaskVisibilityService;
 import com.taskengine.backend.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class TaskServiceImpl implements TaskService {
 
@@ -41,9 +45,6 @@ public class TaskServiceImpl implements TaskService {
   private final SecurityUtils securityUtils;
   private final TaskVisibilityService taskVisibilityService;
   private final NotificationService notificationService;
-  private static final TaskScope GLOBAL_SCOPE = TaskScope.GLOBAL;
-  private static final TaskScope TEAM_SCOPE = TaskScope.TEAM;
-  private static final TaskScope PRIVATE_SCOPE = TaskScope.PRIVATE;
 
   @Override
   @Transactional(readOnly = true)
@@ -52,70 +53,21 @@ public class TaskServiceImpl implements TaskService {
     UUID orgId = user.getOrganization().getId();
     UUID userId = user.getId();
     boolean isAdmin = user.getRole() == UserRole.ADMIN;
-    long total =
-        taskRepository
-            .findVisibleTasksNoStatusNoSearch(
-                orgId,
-                userId,
-                isAdmin,
-                GLOBAL_SCOPE,
-                TEAM_SCOPE,
-                PRIVATE_SCOPE,
-                null,
-                Pageable.unpaged())
-            .getTotalElements();
-    long todo =
-        taskRepository
-            .findVisibleTasksNoSearch(
-                orgId,
-                userId,
-                isAdmin,
-                GLOBAL_SCOPE,
-                TEAM_SCOPE,
-                PRIVATE_SCOPE,
-                TaskStatus.TODO,
-                null,
-                Pageable.unpaged())
-            .getTotalElements();
+    log.info("Fetching task stats for userId={}, orgId={}, isAdmin={}", userId, orgId, isAdmin);
+    long total = taskRepository.count(baseVisibilitySpec(orgId, userId, isAdmin));
+    long todo = taskRepository.count(baseVisibilitySpec(orgId, userId, isAdmin).and(TaskSpecifications.optionalStatus(TaskStatus.TODO)));
     long inProgress =
-        taskRepository
-            .findVisibleTasksNoSearch(
-                orgId,
-                userId,
-                isAdmin,
-                GLOBAL_SCOPE,
-                TEAM_SCOPE,
-                PRIVATE_SCOPE,
-                TaskStatus.IN_PROGRESS,
-                null,
-                Pageable.unpaged())
-            .getTotalElements();
+        taskRepository.count(
+            baseVisibilitySpec(orgId, userId, isAdmin)
+                .and(TaskSpecifications.optionalStatus(TaskStatus.IN_PROGRESS)));
     long inReview =
-        taskRepository
-            .findVisibleTasksNoSearch(
-                orgId,
-                userId,
-                isAdmin,
-                GLOBAL_SCOPE,
-                TEAM_SCOPE,
-                PRIVATE_SCOPE,
-                TaskStatus.IN_REVIEW,
-                null,
-                Pageable.unpaged())
-            .getTotalElements();
+        taskRepository.count(
+            baseVisibilitySpec(orgId, userId, isAdmin)
+                .and(TaskSpecifications.optionalStatus(TaskStatus.IN_REVIEW)));
     long done =
-        taskRepository
-            .findVisibleTasksNoSearch(
-                orgId,
-                userId,
-                isAdmin,
-                GLOBAL_SCOPE,
-                TEAM_SCOPE,
-                PRIVATE_SCOPE,
-                TaskStatus.DONE,
-                null,
-                Pageable.unpaged())
-            .getTotalElements();
+        taskRepository.count(
+            baseVisibilitySpec(orgId, userId, isAdmin)
+                .and(TaskSpecifications.optionalStatus(TaskStatus.DONE)));
     return TaskStatsResponse.builder()
         .total(total)
         .todo(todo)
@@ -129,6 +81,7 @@ public class TaskServiceImpl implements TaskService {
   @Transactional(readOnly = true)
   public Page<TaskResponse> searchTasks(
       TaskStatus status,
+      TaskScope scope,
       UUID teamId,
       String search,
       Pageable pageable) {
@@ -137,62 +90,38 @@ public class TaskServiceImpl implements TaskService {
     boolean isAdmin = user.getRole() == UserRole.ADMIN;
     UUID orgId = user.getOrganization().getId();
     UUID userId = user.getId();
-    // Visibility is enforced in repository queries (org + scope + creator/assignee/team rules)
-    // so pagination/sorting remain DB-backed and consistent.
-    if (status == null && q == null) {
-      return taskRepository
-          .findVisibleTasksNoStatusNoSearch(
-              orgId,
-              userId,
-              isAdmin,
-              GLOBAL_SCOPE,
-              TEAM_SCOPE,
-              PRIVATE_SCOPE,
-              teamId,
-              pageable)
-          .map(this::toDto);
-    }
-    if (status == null) {
-      return taskRepository
-          .findVisibleTasksNoStatus(
-              orgId,
-              userId,
-              isAdmin,
-              GLOBAL_SCOPE,
-              TEAM_SCOPE,
-              PRIVATE_SCOPE,
-              teamId,
-              q,
-              pageable)
-          .map(this::toDto);
-    }
-    if (q == null) {
-      return taskRepository
-          .findVisibleTasksNoSearch(
-              orgId,
-              userId,
-              isAdmin,
-              GLOBAL_SCOPE,
-              TEAM_SCOPE,
-              PRIVATE_SCOPE,
-              status,
-              teamId,
-              pageable)
-          .map(this::toDto);
-    }
-    return taskRepository
-        .findVisibleTasks(
-            orgId,
-            userId,
-            isAdmin,
-            GLOBAL_SCOPE,
-            TEAM_SCOPE,
-            PRIVATE_SCOPE,
-            status,
-            teamId,
-            q,
-            pageable)
-        .map(this::toDto);
+    log.info(
+        "Fetching tasks for userId={}, orgId={}, status={}, scope={}, teamId={}, search='{}', page={}, size={}",
+        userId,
+        orgId,
+        status,
+        scope,
+        teamId,
+        q,
+        pageable.getPageNumber(),
+        pageable.getPageSize());
+    Specification<Task> spec =
+        baseVisibilitySpec(orgId, userId, isAdmin)
+            .and(TaskSpecifications.optionalStatus(status))
+            .and(TaskSpecifications.optionalScope(scope))
+            .and(TaskSpecifications.optionalTeamId(teamId))
+            .and(TaskSpecifications.searchContainsTitle(q))
+            .and(TaskSpecifications.withFetches());
+    Page<Task> page = taskRepository.findAll(spec, pageable);
+    page.getContent()
+        .forEach(
+            t ->
+                log.info(
+                    "User orgId={}, Task orgId={}, taskId={}, scope={}",
+                    orgId,
+                    t.getOrganization().getId(),
+                    t.getId(),
+                    t.getScope()));
+    return page.map(this::toDto);
+  }
+
+  private Specification<Task> baseVisibilitySpec(UUID orgId, UUID userId, boolean isAdmin) {
+    return TaskSpecifications.visibility(orgId, userId, isAdmin);
   }
 
   @Override

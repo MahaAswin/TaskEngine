@@ -18,8 +18,10 @@ import com.taskengine.backend.service.GoogleIdTokenVerifierService.GooglePayload
 import com.taskengine.backend.service.RefreshTokenService;
 import com.taskengine.backend.util.Slugify;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
@@ -112,47 +114,42 @@ public class AuthServiceImpl implements AuthService {
   @Transactional
   public AuthResponse oauthCallback(OAuth2CallbackRequest request) {
     GooglePayload payload = googleIdTokenVerifierService.verify(request.getIdToken());
-    if (payload.email() == null || payload.email().isBlank()) {
+    return oauthLogin(payload.sub(), payload.email(), payload.name(), payload.picture());
+  }
+
+  @Override
+  @Transactional
+  public AuthResponse oauthLogin(String googleSub, String email, String fullName, String avatarUrl) {
+    if (email == null || email.isBlank()) {
       throw new BadRequestException("Google account has no email");
     }
-    String email = payload.email().trim().toLowerCase();
-
-    var existingBySub = userRepository.findByGoogleSubWithOrganization(payload.sub());
-    if (existingBySub.isPresent()) {
-      User u = existingBySub.get();
-      if (!u.isActive()) {
-        throw new BadRequestException("Account disabled");
-      }
-      return issueTokens(u.getId());
+    if (googleSub == null || googleSub.isBlank()) {
+      throw new BadRequestException("Google account subject is missing");
     }
+    String normalizedEmail = email.trim().toLowerCase();
+    log.info("OAuth login → email={}, sub={}", normalizedEmail, googleSub);
 
-    var existingByEmail = userRepository.findByEmailWithOrganization(email);
-    if (existingByEmail.isPresent()) {
-      User u = existingByEmail.get();
-      u.setGoogleSub(payload.sub());
-      if (payload.picture() != null) {
-        u.setAvatarUrl(payload.picture());
+    User user = userRepository.findByGoogleSub(googleSub).orElse(null);
+    Organization targetOrg = resolveOrganizationForEmail(normalizedEmail);
+
+    if (user == null) {
+      user = new User();
+      user.setOrganization(targetOrg);
+      user.setEmail(normalizedEmail);
+      user.setGoogleSub(googleSub);
+      user.setFullName(fullName != null && !fullName.isBlank() ? fullName : normalizedEmail);
+      user.setAvatarUrl(avatarUrl);
+      user.setRole(UserRole.MEMBER);
+      user.setActive(true);
+      userRepository.save(user);
+    } else {
+      if (!user.getOrganization().getId().equals(targetOrg.getId())) {
+        user.setOrganization(targetOrg);
+        userRepository.save(user);
       }
-      userRepository.save(u);
-      return issueTokens(u.getId());
     }
-
-    Organization org = new Organization();
-    String orgName = payload.name() != null ? payload.name() + "'s workspace" : "Workspace";
-    org.setName(orgName);
-    org.setSlug(uniqueSlug(Slugify.baseSlug(orgName)));
-    org.setPlan(OrganizationPlan.FREE);
-    organizationRepository.save(org);
-
-    User user = new User();
-    user.setOrganization(org);
-    user.setEmail(email);
-    user.setGoogleSub(payload.sub());
-    user.setFullName(payload.name() != null ? payload.name() : email);
-    user.setAvatarUrl(payload.picture());
-    user.setRole(UserRole.MEMBER);
-    user.setActive(true);
-    userRepository.save(user);
+    
+    log.info("User {} → orgId={}", user.getEmail(), user.getOrganization().getId());
 
     return issueTokens(user.getId());
   }
@@ -174,5 +171,20 @@ public class AuthServiceImpl implements AuthService {
       slug = base + "-" + (++i);
     }
     return slug;
+  }
+
+  private Organization resolveOrganizationForEmail(String email) {
+    String domain = email.substring(email.indexOf('@') + 1).toLowerCase().trim();
+
+    return organizationRepository
+        .findBySlug(domain)
+        .orElseGet(
+            () -> {
+              Organization org = new Organization();
+              org.setName(domain);
+              org.setSlug(domain);
+              org.setPlan(OrganizationPlan.FREE);
+              return organizationRepository.save(org);
+            });
   }
 }

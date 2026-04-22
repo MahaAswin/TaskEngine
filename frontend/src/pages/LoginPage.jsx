@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { LogIn, Loader2 } from 'lucide-react';
@@ -8,56 +8,29 @@ import { useAuthStore } from '../stores/authStore';
 export default function LoginPage() {
   const navigate = useNavigate();
   const setSessionFromAuth = useAuthStore((s) => s.setSessionFromAuth);
-  const googleBtnRef = useRef(null);
-  const [gsiReady, setGsiReady] = useState(false);
   const [googleError, setGoogleError] = useState('');
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const oauthEndpoint = '/oauth2/authorization/google';
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!googleClientId) return;
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.onload = () => setGsiReady(true);
-    document.body.appendChild(script);
-    return () => {
-      script.remove();
-    };
-  }, [googleClientId]);
-
-  useEffect(() => {
-    if (!gsiReady || !googleClientId || !googleBtnRef.current) return;
-    const g = window.google;
-    if (!g?.accounts?.id) return;
-    googleBtnRef.current.innerHTML = '';
-    g.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: async (resp) => {
-        setGoogleError('');
-        try {
-          const res = await api.post(
-            '/auth/oauth2/callback',
-            { idToken: resp.credential },
-            { skipGlobalErrorToast: true },
-          );
-          setSessionFromAuth(res.data.accessToken);
-          navigate('/dashboard');
-        } catch (err) {
-          setGoogleError(err.normalized?.message || err.message || 'Google sign-in failed');
-        }
-      },
-    });
-    g.accounts.id.renderButton(googleBtnRef.current, {
-      theme: 'outline',
-      size: 'large',
-      width: 320,
-      text: 'signin_with',
-    });
-  }, [gsiReady, googleClientId, navigate, setSessionFromAuth]);
+    const params = new URLSearchParams(window.location.search);
+    const oauthState = params.get('oauth');
+    const accessToken = params.get('accessToken');
+    if (oauthState === 'success' && accessToken) {
+      setSessionFromAuth(accessToken);
+      window.history.replaceState({}, document.title, '/login');
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+    if (oauthState === 'error') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGoogleError(params.get('message') || 'Google login failed');
+      window.history.replaceState({}, document.title, '/login');
+    }
+  }, [navigate, setSessionFromAuth]);
 
   const loginMutation = useMutation({
     mutationFn: (payload) => api.post('/auth/login', payload, { skipGlobalErrorToast: true }),
@@ -147,24 +120,29 @@ export default function LoginPage() {
             Sign in
           </button>
         </form>
-        {googleClientId && (
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-500">Or continue with</span>
-              </div>
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
             </div>
-            <div className="mt-4 flex justify-center" ref={googleBtnRef} />
-            {googleError && (
-              <p className="mt-2 text-center text-xs text-danger" role="alert">
-                {googleError}
-              </p>
-            )}
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-slate-500">Or continue with</span>
+            </div>
           </div>
-        )}
+          <div className="mt-4">
+            <a
+              href={oauthEndpoint}
+              className="flex w-full items-center justify-center rounded-lg border border-bordercard bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Continue with Google
+            </a>
+          </div>
+          {googleError && (
+            <p className="mt-2 text-center text-xs text-danger" role="alert">
+              {googleError}
+            </p>
+          )}
+        </div>
         <p className="mt-8 text-center text-sm text-slate-600">
           No account? <Link to="/register" className="font-medium text-accent hover:underline">Register</Link>
         </p>

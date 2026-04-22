@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import com.taskengine.backend.dto.*;
+import com.taskengine.backend.entity.TaskScope;
 import com.taskengine.backend.entity.TaskStatus;
 import com.taskengine.backend.service.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,11 +42,12 @@ public class TaskController {
   @ApiResponse(responseCode = "200", description = "OK")
   public Page<TaskResponse> list(
       @RequestParam(required = false) TaskStatus status,
+      @RequestParam(required = false) TaskScope scope,
       @RequestParam(required = false) UUID teamId,
       @RequestParam(required = false) String search,
       @PageableDefault(size = 10, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
           Pageable pageable) {
-    return taskService.searchTasks(status, teamId, search, pageable);
+    return taskService.searchTasks(status, scope, teamId, search, pageable);
   }
 
   @GetMapping("/{id}")

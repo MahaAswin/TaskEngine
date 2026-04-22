@@ -15,6 +15,8 @@ public interface TeamService {
 
   TeamResponse createTeam(CreateTeamRequest request);
 
+  TeamResponse joinTeamByInviteCode(String inviteCode);
+
   TeamDetailResponse getTeam(UUID teamId);
 
   List<TeamCandidateResponse> listCandidates(UUID teamId);

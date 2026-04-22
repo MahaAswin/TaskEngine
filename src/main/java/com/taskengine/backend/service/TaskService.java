@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.taskengine.backend.dto.*;
+import com.taskengine.backend.entity.TaskScope;
 import com.taskengine.backend.entity.TaskStatus;
 import com.taskengine.backend.security.TaskPermission;
 import com.taskengine.backend.security.TaskPermissionAction;
@@ -15,6 +16,7 @@ public interface TaskService {
 
   Page<TaskResponse> searchTasks(
       TaskStatus status,
+      TaskScope scope,
       UUID teamId,
       String search,
       Pageable pageable);

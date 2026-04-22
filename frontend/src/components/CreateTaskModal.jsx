@@ -43,6 +43,7 @@ export default function CreateTaskModal({ user }) {
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm((prev) => ({
       ...prev,
       scope: isAdmin ? 'GLOBAL' : 'PRIVATE',

@@ -1,13 +1,15 @@
 package com.taskengine.backend.repository.spec;
 
 import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Subquery;
 import jakarta.persistence.criteria.JoinType;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 import com.taskengine.backend.entity.Task;
-import com.taskengine.backend.entity.TaskPriority;
+import com.taskengine.backend.entity.TaskScope;
 import com.taskengine.backend.entity.TaskStatus;
-import com.taskengine.backend.entity.UserRole;
+import com.taskengine.backend.entity.TeamMember;
 
 public final class TaskSpecifications {
 
@@ -21,30 +23,7 @@ public final class TaskSpecifications {
     return (root, query, cb) -> cb.isFalse(root.get("deleted"));
   }
 
-  public static Specification<Task> memberCreatedBy(UUID userId) {
-    return (root, query, cb) -> cb.equal(root.get("createdBy").get("id"), userId);
-  }
-
-  public static Specification<Task> optionalStatus(TaskStatus status) {
-    return (root, query, cb) ->
-        status == null ? cb.conjunction() : cb.equal(root.get("status"), status);
-  }
-
-  public static Specification<Task> optionalPriority(TaskPriority priority) {
-    return (root, query, cb) ->
-        priority == null ? cb.conjunction() : cb.equal(root.get("priority"), priority);
-  }
-
-  public static Specification<Task> optionalAssignedTo(UUID assignedToId) {
-    return (root, query, cb) -> {
-      if (assignedToId == null) {
-        return cb.conjunction();
-      }
-      return cb.equal(root.get("assignedTo").get("id"), assignedToId);
-    };
-  }
-
-  public static Specification<Task> search(String search) {
+  public static Specification<Task> searchContainsTitle(String search) {
     return (root, query, cb) -> {
       if (search == null || search.isBlank()) {
         return cb.conjunction();
@@ -59,22 +38,49 @@ public final class TaskSpecifications {
     };
   }
 
-  public static Specification<Task> forUserRole(
-      UUID orgId, UserRole role, UUID currentUserId) {
-    Specification<Task> spec = organizationId(orgId);
-    if (role == UserRole.MEMBER) {
-      spec = spec.and(memberCreatedBy(currentUserId));
-    }
-    return spec;
+  public static Specification<Task> optionalStatus(TaskStatus status) {
+    return (root, query, cb) ->
+        status == null ? cb.conjunction() : cb.equal(root.get("status"), status);
   }
 
-  /** Fetch joins for list queries (avoid N+1). */
-  public static Specification<Task> withFetchUsers() {
+  public static Specification<Task> optionalScope(TaskScope scope) {
+    return (root, query, cb) ->
+        scope == null ? cb.conjunction() : cb.equal(root.get("scope"), scope);
+  }
+
+  public static Specification<Task> optionalTeamId(UUID teamId) {
+    return (root, query, cb) ->
+        teamId == null ? cb.conjunction() : cb.equal(root.get("team").get("id"), teamId);
+  }
+
+  public static Specification<Task> visibility(UUID orgId, UUID userId, boolean isAdmin) {
+    return (root, query, cb) -> {
+      Predicate notDeleted = cb.isFalse(root.get("deleted"));
+      Predicate global = cb.equal(root.get("scope"), TaskScope.GLOBAL);
+      Predicate sameOrg = cb.equal(root.get("organization").get("id"), orgId);
+      Predicate createdByCurrent = cb.equal(root.get("createdBy").get("id"), userId);
+      Predicate assignedToCurrent =
+          cb.and(
+              cb.isNotNull(root.get("assignedTo")),
+              cb.equal(root.get("assignedTo").get("id"), userId));
+
+      Predicate orgScopedVis = cb.and(sameOrg, cb.or(createdByCurrent, assignedToCurrent));
+
+      return cb.and(
+          notDeleted,
+          cb.or(global, orgScopedVis));
+    };
+  }
+
+  /** Fetch joins for list queries (avoid N+1) while preserving pagination counts. */
+  public static Specification<Task> withFetches() {
     return (root, query, cb) -> {
       if (query.getResultType() != Long.class && query.getResultType() != long.class) {
         query.distinct(true);
         root.fetch("createdBy", JoinType.INNER);
         root.fetch("assignedTo", JoinType.LEFT);
+        root.fetch("organization", JoinType.INNER);
+        root.fetch("team", JoinType.LEFT);
       }
       return cb.conjunction();
     };

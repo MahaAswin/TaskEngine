@@ -31,6 +31,7 @@ public class TeamServiceImpl implements TeamService {
   private final TeamAuditLogRepository teamAuditLogRepository;
   private final AuditLogService auditLogService;
   private final SecurityUtils securityUtils;
+  private static final String INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
   @Override
   @Transactional(readOnly = true)
@@ -51,6 +52,7 @@ public class TeamServiceImpl implements TeamService {
                     .createdBy(t.getCreatedBy().getId())
                     .createdAt(t.getCreatedAt())
                     .myRole(findMyRole(t.getId(), current.getId()))
+                    .inviteCode(t.getInviteCode())
                     .build())
         .toList();
   }
@@ -70,6 +72,7 @@ public class TeamServiceImpl implements TeamService {
     team.setOrganization(current.getOrganization());
     team.setName(normalizedName);
     team.setDescription(request.getDescription());
+    team.setInviteCode(generateInviteCode());
     team.setCreatedBy(current);
     Team saved = teamRepository.save(team);
 
@@ -106,6 +109,39 @@ public class TeamServiceImpl implements TeamService {
         .createdBy(saved.getCreatedBy().getId())
         .createdAt(saved.getCreatedAt())
         .myRole(TeamMemberRole.TEAM_LEADER)
+        .inviteCode(saved.getInviteCode())
+        .build();
+  }
+
+  @Override
+  @Transactional
+  public TeamResponse joinTeamByInviteCode(String inviteCode) {
+    User current = securityUtils.getCurrentUser();
+    Team team =
+        teamRepository
+            .findByOrganization_IdAndInviteCodeIgnoreCase(
+                current.getOrganization().getId(), inviteCode.trim())
+            .orElseThrow(() -> new ResourceNotFoundException("Invite code is invalid"));
+    if (!teamMemberRepository.existsByTeamIdAndUserId(team.getId(), current.getId())) {
+      TeamMember tm = new TeamMember();
+      tm.setId(new TeamMemberId(team.getId(), current.getId()));
+      tm.setTeam(team);
+      tm.setUser(current);
+      tm.setRole(TeamMemberRole.MEMBER);
+      teamMemberRepository.save(tm);
+      auditLogService.logTeamAction(
+          team.getId(), current.getId(), TeamAuditAction.TEAM_MEMBER_ADDED, current.getId());
+    }
+
+    return TeamResponse.builder()
+        .id(team.getId())
+        .name(team.getName())
+        .description(team.getDescription())
+        .memberCount(teamMemberRepository.countByTeamId(team.getId()))
+        .createdBy(team.getCreatedBy().getId())
+        .createdAt(team.getCreatedAt())
+        .myRole(findMyRole(team.getId(), current.getId()))
+        .inviteCode(team.getInviteCode())
         .build();
   }
 
@@ -125,6 +161,7 @@ public class TeamServiceImpl implements TeamService {
         .createdBy(team.getCreatedBy().getId())
         .createdAt(team.getCreatedAt())
         .myRole(findMyRole(team.getId(), current.getId()))
+        .inviteCode(team.getInviteCode())
         .members(members.stream().map(this::toMemberDto).toList())
         .build();
   }
@@ -339,5 +376,21 @@ public class TeamServiceImpl implements TeamService {
       return;
     }
     throw new PermissionDeniedException("You are not a member of this team");
+  }
+
+  private String generateInviteCode() {
+    java.util.concurrent.ThreadLocalRandom random = java.util.concurrent.ThreadLocalRandom.current();
+    for (int attempt = 0; attempt < 10; attempt++) {
+      StringBuilder sb = new StringBuilder(8);
+      for (int i = 0; i < 8; i++) {
+        int index = random.nextInt(INVITE_CHARS.length());
+        sb.append(INVITE_CHARS.charAt(index));
+      }
+      String code = sb.toString();
+      if (!teamRepository.existsByInviteCodeIgnoreCase(code)) {
+        return code;
+      }
+    }
+    throw new IllegalStateException("Could not generate unique invite code");
   }
 }

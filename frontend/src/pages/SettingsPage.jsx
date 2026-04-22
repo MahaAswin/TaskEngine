@@ -14,6 +14,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!user) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrgName(user.organizationName ?? '');
     setProfile({
       fullName: user.fullName ?? '',

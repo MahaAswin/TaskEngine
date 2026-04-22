@@ -42,7 +42,7 @@ public class OrgServiceImpl implements OrgService {
                     .fullName(u.getFullName())
                     .email(u.getEmail())
                     .role(u.getRole())
-                    .taskCount(userRepository.countTasksCreatedByUserInOrg(orgId, u.getId()))
+                    .taskCount(0L)
                     .build())
         .toList();
   }

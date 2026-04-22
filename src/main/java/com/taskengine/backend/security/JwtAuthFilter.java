@@ -8,13 +8,16 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -34,15 +37,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
       chain.doFilter(request, response);
       return;
     }
-    String subject = jwtService.extractSubject(token);
-    if (subject != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-      UserDetails ud = userDetailsService.loadUserByUsername(subject);
-      if (jwtService.isAccessTokenValid(token, (UserPrincipal) ud)) {
-        UsernamePasswordAuthenticationToken authentication =
-            new UsernamePasswordAuthenticationToken(ud, null, ud.getAuthorities());
-        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+    try {
+      String subject = jwtService.extractSubject(token);
+      if (subject != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        UserDetails ud = userDetailsService.loadUserByUsername(subject);
+        if (jwtService.isAccessTokenValid(token, (UserPrincipal) ud)) {
+          UsernamePasswordAuthenticationToken authentication =
+              new UsernamePasswordAuthenticationToken(ud, null, ud.getAuthorities());
+          authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+          SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
       }
+    } catch (JwtException | IllegalArgumentException ex) {
+      log.warn("Ignoring invalid JWT on path {}: {}", request.getRequestURI(), ex.getMessage());
     }
     chain.doFilter(request, response);
   }

@@ -16,6 +16,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
   @Query("select u from User u join fetch u.organization where u.googleSub = :sub")
   Optional<User> findByGoogleSubWithOrganization(@Param("sub") String sub);
 
+  @Query("select u from User u join fetch u.organization where u.googleSub = :sub")
+  Optional<User> findByGoogleSub(@Param("sub") String sub);
+
   @Query(
       "select u from User u join fetch u.organization o where u.id = :id and o.id = :orgId")
   Optional<User> findByIdAndOrganizationId(
@@ -28,8 +31,4 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
   List<User> findByOrganization_IdOrderByFullNameAsc(UUID organizationId);
 
-  @Query(
-      "select count(t) from Task t where t.organization.id = :orgId and t.createdBy.id = :userId and t.deleted = false")
-  long countTasksCreatedByUserInOrg(
-      @Param("orgId") UUID orgId, @Param("userId") UUID userId);
 }
